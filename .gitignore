@@ -1,11 +1,13 @@
 # Ignore user configuration file (copy example.env to .env and fill in)
 .env
+repos.txt
 
 # Ignore runtime-generated state and log files
 .repo-state
 repo-watcher.log
 
 # Python bytecode and cache
+venv/
 __pycache__/
 *.py[cod]
 *$py.class
