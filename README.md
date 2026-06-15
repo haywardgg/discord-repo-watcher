@@ -13,6 +13,9 @@
 
 ---
 
+<img width="1280" height="720" alt="grok-image-06282362-a7b8-47b7-b544-bc70b73660bb" src="https://github.com/user-attachments/assets/77b13517-eb40-48a8-9169-eb6c958589a8" />
+
+
 ## Quick Start
 
 ```bash
