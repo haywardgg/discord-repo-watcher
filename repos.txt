@@ -1,0 +1,8 @@
+# Add one repository per line in the format: <owner>/<repo-name>
+#
+# Lines starting with # are ignored.
+# Acceptable formats: owner/repo, https://github.com/owner/repo, github.com/owner/repo.git
+#
+# Example repos (replace with your actual repositories):
+# github.com/myuser/project-a
+# microsoft/vscode

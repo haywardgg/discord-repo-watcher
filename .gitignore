@@ -1,0 +1,15 @@
+# Ignore user configuration file (copy example.env to .env and fill in)
+.env
+
+# Ignore runtime-generated state and log files
+.repo-state
+repo-watcher.log
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS files
+.DS_Store
+Thumbs.db
