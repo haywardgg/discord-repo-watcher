@@ -118,9 +118,12 @@ async def send_commit_notification(
     author: str,
     commit_date: str,
     commit_url: str,
+    avatar_url: str | None = None,
 ) -> bool:
     """
     Send a rich embed about a new commit to the given channel.
+    Uses the repository owner's avatar as the embed thumbnail
+    if available, otherwise falls back to the generic GitHub logo.
     Returns True on success.
     """
     description = f"**Repository:** {repo}\n**Author:** {author}"
@@ -145,7 +148,12 @@ async def send_commit_notification(
         inline=False,
     )
     embed.set_footer(text="GitHub Repo Watcher")
-    embed.set_thumbnail(url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png")
+
+    # Use repo owner's avatar if available, otherwise fall back to the generic GitHub logo
+    if avatar_url:
+        embed.set_thumbnail(url=avatar_url)
+    else:
+        embed.set_thumbnail(url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png")
 
     await channel.send(embed=embed)
     return True
@@ -191,14 +199,18 @@ async def check_loop():
                         f"⚠️ **{repo}** - Now tracking this repository! "
                         f"First seen commit: {commit_hash[:7]}"
                     )
+                    avatar_url = watcher.get_repo_avatar_url(repo)
                     await send_commit_notification(
                         notification_channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
+                        avatar_url=avatar_url,
                     )
                 elif reason == "new_commit":
+                    avatar_url = watcher.get_repo_avatar_url(repo)
                     if await send_commit_notification(
                         notification_channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
+                        avatar_url=avatar_url,
                     ):
                         watcher.confirm_notification(repo, commit_hash)
                     else:
@@ -323,15 +335,19 @@ async def check_now(ctx: commands.Context):
                         f"⚠️ **{repo}** - Now tracking! First seen commit: {commit_hash[:7]}",
                         delete_after=60,
                     )
+                    avatar_url = watcher.get_repo_avatar_url(repo)
                     await send_commit_notification(
                         ctx.channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
+                        avatar_url=avatar_url,
                     )
                     updates += 1
                 elif reason == "new_commit":
+                    avatar_url = watcher.get_repo_avatar_url(repo)
                     await send_commit_notification(
                         ctx.channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
+                        avatar_url=avatar_url,
                     )
                     watcher.confirm_notification(repo, commit_hash)
                     updates += 1

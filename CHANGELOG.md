@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Repository owner avatar in commit embeds** — Commit notifications now display the repository owner's profile photo (user or organization avatar) as the embed thumbnail instead of the generic GitHub logo. Fetched once from the GitHub API and cached in-memory; falls back to the GitHub logo gracefully on failure.
+- **`get_repo_avatar_url()` in `watcher.py`** — New function to fetch and cache the repository owner's avatar URL from the GitHub API.
 - **Configurable help command name** — Set `HELP_COMMAND` in your `.env` file to change the help command (e.g. `HELP_COMMAND="repos-help"` makes it `!repos-help`). Defaults to `help` for backwards compatibility. `!commands` always works as an alias regardless of the configured name.
 - **Access control for `!add-repo` and `!remove-repo` commands** — Only server administrators and moderators can now use these commands. Regular users receive a permission error. The check uses Discord's built-in permission system:
   - Users with `Administrator` permission are allowed

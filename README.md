@@ -44,7 +44,7 @@ python bot.py
 
 - ✅ **Interactive commands** — `!add-repo`, `!remove-repo`, `!list-repos`, `!check-now`
 - ✅ **Automated monitoring** — checks all watched repos every 5 minutes (configurable)
-- ✅ **Rich Discord embeds** — commit details, author, timestamp, and direct links
+- ✅ **Rich Discord embeds** — commit details, author, timestamp, direct links, and repo owner's avatar
 - ✅ **Rate limit handling** — detects GitHub API rate limits and retries automatically
 - ✅ **Token support** — GitHub token for 5,000 API requests/hour
 - ✅ **State persistence** — never sends duplicate notifications, survives restarts
@@ -142,7 +142,7 @@ python bot.py
 
 1. **Bot starts** — connects to Discord, loads the repo list from `repos.txt`
 2. **Background loop** — every `CHECK_INTERVAL` seconds, checks all watched repos for new commits via the GitHub API
-3. **New commit detected** — posts a rich embed with commit hash, message, author, and timestamp
+3. **New commit detected** — posts a rich embed with commit hash, message, author, timestamp, and repo owner's avatar as the thumbnail
 4. **State tracked** — saves the last-seen commit hash to `.repo-state`, ensuring no duplicate notifications
 5. **Commands** — `!add-repo` and `!remove-repo` update `repos.txt` in real time
 6. **Access control** — `!add-repo` and `!remove-repo` are restricted to server administrators and moderators

@@ -14,6 +14,10 @@ import state_manager
 logger = logging.getLogger("repo_watcher")
 
 
+# In-memory cache: {repo: avatar_url}
+_avatar_cache: dict[str, str] = {}
+
+
 def _github_api_call(endpoint: str) -> Optional[list]:
     """
     Make a call to the GitHub API with retry logic for rate limiting.
@@ -62,6 +66,39 @@ def _github_api_call(endpoint: str) -> Optional[list]:
 
     logger.error("Failed to call GitHub API after %d attempts: %s", max_retries, endpoint)
     return None
+
+
+def get_repo_avatar_url(repo: str) -> Optional[str]:
+    """
+    Fetch the avatar URL of a repository's owner (user or organisation).
+    Results are cached in memory to avoid repeated API calls.
+    Returns the avatar URL string, or None on failure.
+    """
+    # Check cache first
+    cached = _avatar_cache.get(repo)
+    if cached:
+        logger.debug("Using cached avatar URL for %s", repo)
+        return cached
+
+    data = _github_api_call(f"repos/{repo}")
+    if not data or not isinstance(data, dict):
+        logger.warning("Could not fetch repo metadata for %s", repo)
+        return None
+
+    owner = data.get("owner")
+    if not owner or not isinstance(owner, dict):
+        logger.warning("No owner data found for %s", repo)
+        return None
+
+    avatar_url = owner.get("avatar_url")
+    if not avatar_url:
+        logger.warning("No avatar_url for owner of %s", repo)
+        return None
+
+    # Cache it
+    _avatar_cache[repo] = avatar_url
+    logger.debug("Cached avatar URL for %s: %s", repo, avatar_url)
+    return avatar_url
 
 
 def get_latest_commit(repo: str) -> Optional[Tuple[str, str, str, str, str]]:
