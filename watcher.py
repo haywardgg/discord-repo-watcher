@@ -2,6 +2,7 @@
 Core logic for fetching commits from the GitHub API and checking for new commits.
 """
 
+import fnmatch
 import logging
 import time
 from typing import Optional, Tuple, Union
@@ -16,6 +17,71 @@ logger = logging.getLogger("repo_watcher")
 
 # In-memory cache: {repo: avatar_url}
 _avatar_cache: dict[str, str] = {}
+
+
+def _should_skip_by_commit_message(message: str) -> Optional[str]:
+    """
+    Check if a commit message matches any ignore strings.
+    Returns a reason string if it should be skipped, None otherwise.
+    """
+    ignore_strings = config.get_ignore_strings()
+    if not ignore_strings:
+        return None
+    msg_lower = message.lower()
+    for pattern in ignore_strings:
+        if pattern.lower() in msg_lower:
+            return f"commit message matches IGNORE_STRINGS pattern '{pattern}'"
+    return None
+
+
+def _check_ignore_patterns(files: list[dict]) -> Optional[str]:
+    """
+    Check if all changed files match ignore file/folder patterns.
+    Patterns support glob-style wildcards (*, ?, [seq]) via fnmatch.
+    If ALL changed files are ignored, returns a reason string to skip the commit.
+    If ANY file is NOT ignored, returns None (commit should proceed).
+    """
+    ignore_files = config.get_ignore_file_patterns()
+    ignore_folders = config.get_ignore_folder_patterns()
+
+    if not ignore_files and not ignore_folders:
+        return None
+
+    # We need the list of changed files from the commit
+    if not files:
+        return None
+
+    for f in files:
+        filename = f.get("filename", "")
+        if not filename:
+            return None  # Can't determine, don't skip
+        # Check if this file should be ignored
+        ignored = False
+
+        # Check file patterns (glob-style via fnmatch, e.g. *.txt, README.*)
+        for pattern in ignore_files:
+            if fnmatch.fnmatch(filename, pattern):
+                ignored = True
+                break
+
+        if not ignored:
+            # Check folder patterns (substring match)
+            for pattern in ignore_folders:
+                if pattern in filename:
+                    ignored = True
+                    break
+
+        if not ignored:
+            # Found a file that's not ignored — don't skip the commit
+            return None
+
+    # All files matched ignore patterns
+    reasons = []
+    if ignore_files:
+        reasons.append(f"files match IGNORE_FILE_PATTERNS ({', '.join(ignore_files)})")
+    if ignore_folders:
+        reasons.append(f"files match IGNORE_FOLDER_PATTERNS ({', '.join(ignore_folders)})")
+    return "; ".join(reasons)
 
 
 def _github_api_call(endpoint: str) -> Optional[list]:
@@ -142,6 +208,44 @@ CheckRepoResult = Union[
 ]
 
 
+def _check_commit_filters(repo: str, commit_hash: str, commit_msg: str) -> Optional[str]:
+    """
+    Apply all configured filters (edit threshold, file patterns, folder patterns, message strings)
+    to a commit. Returns a reason string if the commit should be skipped, None if it passes all filters.
+    """
+    # 1. Check commit message ignore strings (fast, no API call)
+    skip_reason = _should_skip_by_commit_message(commit_msg)
+    if skip_reason:
+        return skip_reason
+
+    # 2. Fetch commit details for stats and file list
+    data = _github_api_call(f"repos/{repo}/commits/{commit_hash}")
+    if not data or not isinstance(data, dict):
+        logger.warning("Could not fetch commit details for %s/%s", repo, commit_hash[:7])
+        return None  # Can't determine, don't skip
+
+    # 3. Check edit threshold
+    min_threshold = config.get_min_edit_threshold()
+    if min_threshold > 0:
+        stats = data.get("stats")
+        if stats and isinstance(stats, dict):
+            additions = stats.get("additions", 0)
+            deletions = stats.get("deletions", 0)
+            total = additions + deletions
+            if total < min_threshold:
+                return (
+                    f"total changes ({total} lines) below MIN_EDIT_THRESHOLD ({min_threshold})"
+                )
+
+    # 4. Check file/folder ignore patterns
+    files = data.get("files")
+    skip_reason = _check_ignore_patterns(files if files else [])
+    if skip_reason:
+        return skip_reason
+
+    return None  # Passes all filters
+
+
 def check_repo(repo: str) -> CheckRepoResult:
     """
     Check a single repository for new commits.
@@ -170,6 +274,17 @@ def check_repo(repo: str) -> CheckRepoResult:
         logger.info(
             "New commit detected in %s: %s (was %s)", repo, commit_hash[:7], last_hash[:7]
         )
+
+        # Apply filters before reporting as an update
+        skip_reason = _check_commit_filters(repo, commit_hash, commit_msg)
+        if skip_reason:
+            logger.info(
+                "Skipping notification for %s %s: %s", repo, commit_hash[:7], skip_reason
+            )
+            # Still update state to avoid re-notifying on skipped commits
+            state_manager.set_last_seen(state_file, repo, commit_hash)
+            return (True, None)
+
         return (True, commit_hash, "new_commit", commit_msg, author_name, commit_date, commit_url)
     else:
         logger.debug("No new commits for %s (current: %s)", repo, commit_hash[:7])
