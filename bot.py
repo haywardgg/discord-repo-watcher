@@ -63,6 +63,37 @@ if not os.path.isfile(repo_list_path):
     repo_manager.save_repos(repo_list_path, [])
 
 
+# ── Permission Check ──────────────────────────────────────────────────────────
+
+
+def is_admin_or_mod():
+    """
+    Check decorator that only allows server admins (Administrator permission)
+    or moderators (Manage Messages permission) to run a command.
+    """
+    async def predicate(ctx: commands.Context) -> bool:
+        # Allow bot owners unconditionally
+        if ctx.author.id == ctx.bot.owner_id:
+            return True
+
+        # Check the author's permissions in the current channel
+        permissions = ctx.author.guild_permissions if ctx.guild else discord.Permissions()
+
+        # Administrators have full control
+        if permissions.administrator:
+            return True
+
+        # Moderators typically have at least one of these permissions
+        if permissions.manage_guild or permissions.manage_messages or permissions.kick_members or permissions.ban_members:
+            return True
+
+        # If none of the above, deny access
+        raise commands.MissingPermissions(
+            ["administrator", "manage_guild", "manage_messages", "kick_members", "ban_members"]
+        )
+    return commands.check(predicate)
+
+
 # ── Events ────────────────────────────────────────────────────────────────────
 
 @bot.event
@@ -221,6 +252,7 @@ async def _delete_command(ctx: commands.Context) -> None:
 
 
 @bot.command(name="add-repo", aliases=["add"])
+@is_admin_or_mod()
 async def add_repo(ctx: commands.Context, *, repo: str):
     """Add a repository to watch. Usage: !add-repo owner/repo-name"""
     await _delete_command(ctx)
@@ -236,6 +268,7 @@ async def add_repo(ctx: commands.Context, *, repo: str):
 
 
 @bot.command(name="remove-repo", aliases=["remove", "rm"])
+@is_admin_or_mod()
 async def remove_repo(ctx: commands.Context, *, repo: str):
     """Remove a repository from the watch list. Usage: !remove-repo owner/repo-name"""
     await _delete_command(ctx)
@@ -323,12 +356,12 @@ async def help_command(ctx: commands.Context):
     )
     embed.add_field(
         name="!add-repo <owner/repo>",
-        value="Add a repository to watch.\n*Alias: !add*",
+        value="Add a repository to watch.\n*Alias: !add*\n*Restricted to Admins & Moderators*",
         inline=False,
     )
     embed.add_field(
         name="!remove-repo <owner/repo>",
-        value="Remove a repository from the watch list.\n*Aliases: !remove, !rm*",
+        value="Remove a repository from the watch list.\n*Aliases: !remove, !rm*\n*Restricted to Admins & Moderators*",
         inline=False,
     )
     embed.add_field(
@@ -347,6 +380,35 @@ async def help_command(ctx: commands.Context):
         inline=False,
     )
     await ctx.send(embed=embed, delete_after=120)
+
+
+# ── Error Handling ────────────────────────────────────────────────────────────
+
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: commands.CommandError):
+    """Global error handler for command errors."""
+    # Ignore command not found errors (let them pass silently)
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    # Handle permission errors with a friendly message
+    if isinstance(error, commands.MissingPermissions):
+        await _delete_command(ctx)
+        await ctx.send(
+            "❌ You don't have permission to use this command. "
+            "Only server admins and moderators can use it.",
+            delete_after=30,
+        )
+        logger.warning(
+            "User %s tried to use %s without permission: %s",
+            ctx.author, ctx.command, error,
+        )
+        return
+
+    # Log other errors
+    logger.error("Command error in %s: %s", ctx.command, error, exc_info=True)
+    await ctx.send("❌ An unexpected error occurred.", delete_after=30)
 
 
 # ── Main Entry Point ──────────────────────────────────────────────────────────

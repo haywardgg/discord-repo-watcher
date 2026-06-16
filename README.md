@@ -51,6 +51,7 @@ python bot.py
 - ✅ **Clean channels** — auto-deletes command messages after responding
 - ✅ **Comprehensive logging** — rotating log files with debug-level detail
 - ✅ **Input sanitization** — accepts any repo URL format (`owner/repo`, full URL, `.git` suffix)
+- ✅ **Access control** — `!add-repo` / `!remove-repo` restricted to admins & moderators only
 
 ---
 
@@ -118,8 +119,8 @@ python bot.py
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
-| `!add-repo <owner/repo>` | `!add` | Add a repository to watch |
-| `!remove-repo <owner/repo>` | `!remove`, `!rm` | Remove a repository from watch |
+| `!add-repo <owner/repo>` | `!add` | Add a repository to watch *(Admins & Moderators only)* |
+| `!remove-repo <owner/repo>` | `!remove`, `!rm` | Remove a repository from watch *(Admins & Moderators only)* |
 | `!list-repos` | `!list`, `!repos` | Show all watched repositories |
 | `!check-now` | `!check`, `!scan` | Manually check all repos for new commits |
 | `!help` | `!commands` | Show available commands |
@@ -143,6 +144,7 @@ python bot.py
 3. **New commit detected** — posts a rich embed with commit hash, message, author, and timestamp
 4. **State tracked** — saves the last-seen commit hash to `.repo-state`, ensuring no duplicate notifications
 5. **Commands** — `!add-repo` and `!remove-repo` update `repos.txt` in real time
+6. **Access control** — `!add-repo` and `!remove-repo` are restricted to server administrators and moderators
 
 ### Notification Channel Selection
 
@@ -219,6 +221,7 @@ python bot.py
 
 | File | Purpose | Editable? |
 |------|---------|-----------|
+| `CHANGELOG.md` | Version history and changes | ❌ No |
 | `bot.py` | Main Discord bot — commands and background loop | ❌ No |
 | `config.py` | Configuration loader from `.env` | ❌ No |
 | `watcher.py` | GitHub API calls and commit checking logic | ❌ No |
@@ -241,6 +244,7 @@ python bot.py
 | No notifications sent | No suitable channel found | Create a channel named `repo-watcher` or `github` |
 | Bot can't send messages in channel | Channel permission overwrites | Add the bot's role to the channel permissions with Send Messages ✅ |
 | `!add-repo` fails | Invalid repo format | Use `owner/repo` format (e.g., `microsoft/vscode`) |
+| `!add-repo` says "No permission" | User is not admin/mod | Ask a server admin or moderator to run the command |
 | GitHub API errors | Rate limited or no token | Add a `GITHUB_TOKEN` or reduce repo count |
 | Duplicate commit notifications | State file corruption | See "State File Recovery" below |
 
@@ -285,6 +289,9 @@ A: Generate one at [GitHub Settings → Tokens](https://github.com/settings/toke
 **Q: Can I run multiple instances for different servers?**  
 A: Yes. The bot can be in multiple servers simultaneously. Notifications go to the first suitable channel in each server.
 
+**Q: Who can use `!add-repo` and `!remove-repo`?**  
+A: Only users with **Administrator** permission or **moderator-level permissions** (Manage Server, Manage Messages, Kick Members, Ban Members) can use these commands. Regular members will see a permission error.
+
 **Q: How do I stop the bot from auto-deleting command messages?**  
 A: Remove the `await _delete_command(ctx)` calls from the command handlers in `bot.py`.
 
@@ -305,6 +312,7 @@ A: Not yet, but a `Dockerfile` is planned for future releases.
 - **Bot permissions are minimal** — only Send Messages, Embed Links, Manage Messages, and Read Message History
 - **No database** — all data is stored in plain text files with no external service dependencies
 - **Process visibility** — tokens are passed as environment variables, not hardcoded in scripts
+- **Access control** — destructive commands (`!add-repo`, `!remove-repo`) are restricted to admins and moderators only
 
 ---
 
