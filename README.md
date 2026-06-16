@@ -52,7 +52,6 @@ python bot.py
 - ✅ **Comprehensive logging** — rotating log files with debug-level detail
 - ✅ **Input sanitization** — accepts any repo URL format (`owner/repo`, full URL, `.git` suffix)
 - ✅ **Access control** — `!add-repo` / `!remove-repo` restricted to admins & moderators only
-- ✅ **Commit age filter** — suppresses notifications for commits younger than a configurable age (default: 8 hours) to prevent spam during active development
 
 ---
 
@@ -104,7 +103,6 @@ Edit `.env` with your settings:
 | `MAX_RETRIES` | ❌ No | `3` | Retry attempts on rate limit errors |
 | `HELP_COMMAND` | ❌ No | `"help"` | Custom name for the help command (e.g. `repos-help`) |
 | `RETRY_DELAY` | ❌ No | `5` | Seconds between retries |
-| `MIN_COMMIT_AGE_HOURS` | ❌ No | `8` | Minimum commit age (hours) before sending a notification. Set to `0` to disable. |
 
 ### 4. Run the Bot
 

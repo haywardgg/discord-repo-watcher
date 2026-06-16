@@ -63,12 +63,3 @@ def get_retry_delay() -> int:
 def get_help_command() -> str:
     """Get the custom help command name (default: help)."""
     return os.getenv("HELP_COMMAND", "help").strip().lower()
-
-
-def get_min_commit_age_hours() -> int:
-    """
-    Get the minimum age in hours for a commit before it triggers a notification.
-    Commits younger than this age will be silently tracked but not broadcast.
-    Default: 8 hours.
-    """
-    return int(os.getenv("MIN_COMMIT_AGE_HOURS", "8"))
