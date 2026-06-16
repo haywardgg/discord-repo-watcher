@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Configurable help command name** — Set `HELP_COMMAND` in your `.env` file to change the help command (e.g. `HELP_COMMAND="repos-help"` makes it `!repos-help`). Defaults to `help` for backwards compatibility. `!commands` always works as an alias regardless of the configured name.
 - **Access control for `!add-repo` and `!remove-repo` commands** — Only server administrators and moderators can now use these commands. Regular users receive a permission error. The check uses Discord's built-in permission system:
   - Users with `Administrator` permission are allowed
   - Users with moderator-level permissions (`Manage Server`, `Manage Messages`, `Kick Members`, `Ban Members`) are allowed

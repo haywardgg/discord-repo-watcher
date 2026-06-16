@@ -346,40 +346,55 @@ async def check_now(ctx: commands.Context):
     await ctx.send(summary, delete_after=60)
 
 
-@bot.command(name="help", aliases=["commands"])
-async def help_command(ctx: commands.Context):
-    """Show available commands."""
-    await _delete_command(ctx)
-    embed = discord.Embed(
-        title="🤖 GitHub Repo Watcher Commands",
-        color=COMMIT_EMBED_COLOR,
-    )
-    embed.add_field(
-        name="!add-repo <owner/repo>",
-        value="Add a repository to watch.\n*Alias: !add*\n*Restricted to Admins & Moderators*",
-        inline=False,
-    )
-    embed.add_field(
-        name="!remove-repo <owner/repo>",
-        value="Remove a repository from the watch list.\n*Aliases: !remove, !rm*\n*Restricted to Admins & Moderators*",
-        inline=False,
-    )
-    embed.add_field(
-        name="!list-repos",
-        value="List all currently watched repositories.\n*Aliases: !list, !repos*",
-        inline=False,
-    )
-    embed.add_field(
-        name="!check-now",
-        value="Manually check all repos for new commits right now.\n*Aliases: !check, !scan*",
-        inline=False,
-    )
-    embed.add_field(
-        name="!help",
-        value="Show this help message.\n*Aliases: !commands*",
-        inline=False,
-    )
-    await ctx.send(embed=embed, delete_after=120)
+# ── Help Command ──────────────────────────────────────────────────────────────
+
+# The help command is registered via a function so it can use the configured name
+# from .env. Set HELP_COMMAND in your .env file (e.g. HELP_COMMAND="repos-help")
+# to avoid conflicts with other bots responding to !help.
+
+
+def _register_help_command():
+    """Register the help command with the configured name from .env."""
+    help_name = config.get_help_command()
+
+    @bot.command(name=help_name, aliases=["commands"])
+    async def help_command(ctx: commands.Context):
+        """Show available commands."""
+        await _delete_command(ctx)
+        prefix = ctx.prefix
+        embed = discord.Embed(
+            title="🤖 GitHub Repo Watcher Commands",
+            color=COMMIT_EMBED_COLOR,
+        )
+        embed.add_field(
+            name=f"{prefix}add-repo <owner/repo>",
+            value=f"Add a repository to watch.\n*Alias: {prefix}add*\n*Restricted to Admins & Moderators*",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{prefix}remove-repo <owner/repo>",
+            value=f"Remove a repository from the watch list.\n*Aliases: {prefix}remove, {prefix}rm*\n*Restricted to Admins & Moderators*",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{prefix}list-repos",
+            value=f"List all currently watched repositories.\n*Aliases: {prefix}list, {prefix}repos*",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{prefix}check-now",
+            value=f"Manually check all repos for new commits right now.\n*Aliases: {prefix}check, {prefix}scan*",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{prefix}{help_name}",
+            value=f"Show this help message.\n*Aliases: {prefix}commands*",
+            inline=False,
+        )
+        await ctx.send(embed=embed, delete_after=120)
+
+
+_register_help_command()
 
 
 # ── Error Handling ────────────────────────────────────────────────────────────

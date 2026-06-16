@@ -101,6 +101,7 @@ Edit `.env` with your settings:
 | `LOG_FILE` | ❌ No | `./repo-watcher.log` | Path to the log file |
 | `CHECK_INTERVAL` | ❌ No | `300` | Seconds between background checks |
 | `MAX_RETRIES` | ❌ No | `3` | Retry attempts on rate limit errors |
+| `HELP_COMMAND` | ❌ No | `"help"` | Custom name for the help command (e.g. `repos-help`) |
 | `RETRY_DELAY` | ❌ No | `5` | Seconds between retries |
 
 ### 4. Run the Bot

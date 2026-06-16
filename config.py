@@ -58,3 +58,8 @@ def get_max_retries() -> int:
 def get_retry_delay() -> int:
     """Get delay in seconds between retries (default: 5)."""
     return int(os.getenv("RETRY_DELAY", "5"))
+
+
+def get_help_command() -> str:
+    """Get the custom help command name (default: help)."""
+    return os.getenv("HELP_COMMAND", "help").strip().lower()
