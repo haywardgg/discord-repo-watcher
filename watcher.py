@@ -2,6 +2,7 @@
 Core logic for fetching commits from the GitHub API and checking for new commits.
 """
 
+import datetime
 import logging
 import time
 from typing import Optional, Tuple, Union
@@ -142,6 +143,43 @@ CheckRepoResult = Union[
 ]
 
 
+def _parse_iso_date(date_str: str) -> Optional[datetime.datetime]:
+    """
+    Parse an ISO 8601 date string into an aware UTC datetime.
+    GitHub returns dates in ISO 8601 format (e.g. '2024-01-15T10:30:00Z').
+    Returns None if parsing fails.
+    """
+    if not date_str:
+        return None
+    try:
+        # Handle 'Z' suffix and timezone offsets
+        if date_str.endswith("Z"):
+            date_str = date_str[:-1] + "+00:00"
+        return datetime.datetime.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        logger.warning("Failed to parse commit date: %s", date_str)
+        return None
+
+
+def _is_commit_old_enough(commit_date: str, min_age_hours: int) -> bool:
+    """
+    Check if a commit is old enough to notify about.
+    Returns True if the commit should be notified (i.e. it's >= min_age_hours old).
+    """
+    commit_dt = _parse_iso_date(commit_date)
+    if commit_dt is None:
+        # If we can't parse the date, err on the side of notifying
+        logger.warning("Could not parse commit date '%s' - notifying anyway", commit_date)
+        return True
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    age = now - commit_dt
+    age_hours = age.total_seconds() / 3600
+
+    logger.debug("Commit age: %.1f hours (min required: %d)", age_hours, min_age_hours)
+    return age_hours >= min_age_hours
+
+
 def check_repo(repo: str) -> CheckRepoResult:
     """
     Check a single repository for new commits.
@@ -167,6 +205,19 @@ def check_repo(repo: str) -> CheckRepoResult:
         return (True, commit_hash, "first_seen", commit_msg, author_name, commit_date, commit_url)
 
     if commit_hash != last_hash:
+        min_age_hours = config.get_min_commit_age_hours()
+
+        if min_age_hours > 0 and not _is_commit_old_enough(commit_date, min_age_hours):
+            logger.info(
+                "New commit in %s (%s) is too young (%s) - deferring notification "
+                "(min age: %dh)",
+                repo, commit_hash[:7], commit_date, min_age_hours,
+            )
+            # Return (True, None) so the caller does nothing.
+            # State is NOT updated, so this commit will be re-evaluated
+            # on the next check cycle until it's old enough.
+            return (True, None)
+
         logger.info(
             "New commit detected in %s: %s (was %s)", repo, commit_hash[:7], last_hash[:7]
         )
