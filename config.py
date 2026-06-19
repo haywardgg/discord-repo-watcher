@@ -60,19 +60,50 @@ def get_retry_delay() -> int:
     return int(os.getenv("RETRY_DELAY", "5"))
 
 
-def get_ignore_file_patterns() -> list[str]:
-    """
-    Get the ignore file patterns from the environment.
-    Returns a list of lowercase substrings. If a commit's changed files ALL match
-    any of these patterns, the notification is suppressed.
-    Example: IGNORE_FILE_PATTERNS="README.md,.gitignore,LICENSE"
-    """
-    raw = os.getenv("IGNORE_FILE_PATTERNS", "")
-    if not raw or not raw.strip():
-        return []
-    return [pattern.strip().lower() for pattern in raw.split(",") if pattern.strip()]
-
-
 def get_help_command() -> str:
     """Get the custom help command name (default: help)."""
     return os.getenv("HELP_COMMAND", "help").strip().lower()
+
+
+def get_min_edit_threshold() -> int:
+    """
+    Get the minimum total lines changed (additions + deletions) required to trigger a notification.
+    Defaults to 0 (no threshold — notify on every commit).
+    """
+    return int(os.getenv("MIN_EDIT_THRESHOLD", "0"))
+
+
+def get_ignore_file_patterns() -> list[str]:
+    """
+    Get a list of file path substrings to ignore.
+    If a changed file's path contains any of these substrings, the commit is skipped.
+    Comma-separated in .env, e.g. IGNORE_FILE_PATTERNS="README.md,LICENSE"
+    """
+    raw = os.getenv("IGNORE_FILE_PATTERNS", "")
+    if not raw.strip():
+        return []
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def get_ignore_folder_patterns() -> list[str]:
+    """
+    Get a list of folder path substrings to ignore.
+    If a changed file's path contains any of these substrings, the commit is skipped.
+    Comma-separated in .env, e.g. IGNORE_FOLDER_PATTERNS="docs/,assets/"
+    """
+    raw = os.getenv("IGNORE_FOLDER_PATTERNS", "")
+    if not raw.strip():
+        return []
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def get_ignore_strings() -> list[str]:
+    """
+    Get a list of strings to ignore in commit messages.
+    If the commit message contains any of these substrings, the commit is skipped.
+    Comma-separated in .env, e.g. IGNORE_STRINGS="typo,fix readme,chore"
+    """
+    raw = os.getenv("IGNORE_STRINGS", "")
+    if not raw.strip():
+        return []
+    return [s.strip() for s in raw.split(",") if s.strip()]

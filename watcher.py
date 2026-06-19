@@ -2,6 +2,7 @@
 Core logic for fetching commits from the GitHub API and checking for new commits.
 """
 
+import fnmatch
 import logging
 import time
 from typing import Optional, Tuple, Union
@@ -18,10 +19,75 @@ logger = logging.getLogger("repo_watcher")
 _avatar_cache: dict[str, str] = {}
 
 
-def _github_api_call_internal(endpoint: str) -> Optional[dict]:
+def _should_skip_by_commit_message(message: str) -> Optional[str]:
+    """
+    Check if a commit message matches any ignore strings.
+    Returns a reason string if it should be skipped, None otherwise.
+    """
+    ignore_strings = config.get_ignore_strings()
+    if not ignore_strings:
+        return None
+    msg_lower = message.lower()
+    for pattern in ignore_strings:
+        if pattern.lower() in msg_lower:
+            return f"commit message matches IGNORE_STRINGS pattern '{pattern}'"
+    return None
+
+
+def _check_ignore_patterns(files: list[dict]) -> Optional[str]:
+    """
+    Check if all changed files match ignore file/folder patterns.
+    Patterns support glob-style wildcards (*, ?, [seq]) via fnmatch.
+    If ALL changed files are ignored, returns a reason string to skip the commit.
+    If ANY file is NOT ignored, returns None (commit should proceed).
+    """
+    ignore_files = config.get_ignore_file_patterns()
+    ignore_folders = config.get_ignore_folder_patterns()
+
+    if not ignore_files and not ignore_folders:
+        return None
+
+    # We need the list of changed files from the commit
+    if not files:
+        return None
+
+    for f in files:
+        filename = f.get("filename", "")
+        if not filename:
+            return None  # Can't determine, don't skip
+        # Check if this file should be ignored
+        ignored = False
+
+        # Check file patterns (glob-style via fnmatch, e.g. *.txt, README.*)
+        for pattern in ignore_files:
+            if fnmatch.fnmatch(filename, pattern):
+                ignored = True
+                break
+
+        if not ignored:
+            # Check folder patterns (substring match)
+            for pattern in ignore_folders:
+                if pattern in filename:
+                    ignored = True
+                    break
+
+        if not ignored:
+            # Found a file that's not ignored — don't skip the commit
+            return None
+
+    # All files matched ignore patterns
+    reasons = []
+    if ignore_files:
+        reasons.append(f"files match IGNORE_FILE_PATTERNS ({', '.join(ignore_files)})")
+    if ignore_folders:
+        reasons.append(f"files match IGNORE_FOLDER_PATTERNS ({', '.join(ignore_folders)})")
+    return "; ".join(reasons)
+
+
+def _github_api_call(endpoint: str) -> Optional[list]:
     """
     Make a call to the GitHub API with retry logic for rate limiting.
-    Returns the parsed JSON response (dict), or None on failure.
+    Returns the parsed JSON response (a list for the commits endpoint), or None on failure.
     """
     url = f"https://api.github.com/{endpoint}"
     headers = {"Accept": "application/vnd.github.v3+json"}
@@ -47,11 +113,8 @@ def _github_api_call_internal(endpoint: str) -> Optional[dict]:
             continue
 
         if resp.status_code == 429 or resp.status_code == 403:
-            try:
-                error_data = resp.json()
-                message = error_data.get("message", "Unknown rate limit error")
-            except Exception:
-                message = "Unknown rate limit error"
+            error_data = resp.json()
+            message = error_data.get("message", "Unknown rate limit error")
             logger.warning("Rate limited: %s, retrying in %ds...", message, retry_delay)
             time.sleep(retry_delay)
             continue
@@ -68,20 +131,6 @@ def _github_api_call_internal(endpoint: str) -> Optional[dict]:
         return resp.json()
 
     logger.error("Failed to call GitHub API after %d attempts: %s", max_retries, endpoint)
-    return None
-
-
-def _github_api_call(endpoint: str) -> Optional[list]:
-    """
-    Make a call to the GitHub API with retry logic for rate limiting.
-    Returns the parsed JSON response (a list for the commits endpoint), or None on failure.
-    """
-    result = _github_api_call_internal(endpoint)
-    if isinstance(result, list):
-        return result
-    if result is None:
-        return None
-    logger.warning("Expected list response from %s, got %s", endpoint, type(result).__name__)
     return None
 
 
@@ -116,44 +165,6 @@ def get_repo_avatar_url(repo: str) -> Optional[str]:
     _avatar_cache[repo] = avatar_url
     logger.debug("Cached avatar URL for %s: %s", repo, avatar_url)
     return avatar_url
-
-
-def _get_commit_files(repo: str, commit_sha: str) -> list[str]:
-    """
-    Fetch the list of changed filenames in a commit.
-    Returns a list of filename strings, or an empty list on failure.
-    """
-    data = _github_api_call_internal(f"repos/{repo}/commits/{commit_sha}")
-    if not data or not isinstance(data, dict):
-        logger.warning("Could not fetch commit details for %s/%s", repo, commit_sha[:7])
-        return []
-
-    files = data.get("files", [])
-    if not files or not isinstance(files, list):
-        logger.debug("No files array in commit details for %s/%s", repo, commit_sha[:7])
-        return []
-
-    return [f.get("filename", "") for f in files if isinstance(f, dict)]
-
-
-def _should_ignore_commit(files_changed: list[str], ignore_patterns: list[str]) -> bool:
-    """
-    Check if ALL changed files match at least one ignore pattern.
-    If every file matches a pattern, the commit should be suppressed.
-    Returns True if the commit should be ignored (no notification sent).
-    """
-    if not ignore_patterns or not files_changed:
-        return False
-
-    for filename in files_changed:
-        filename_lower = filename.lower()
-        # If ANY single file doesn't match any pattern, don't suppress
-        if not any(pattern in filename_lower for pattern in ignore_patterns):
-            return False
-
-    # All files matched at least one pattern
-    logger.debug("Commit suppressed by ignore patterns: all files matched")
-    return True
 
 
 def get_latest_commit(repo: str) -> Optional[Tuple[str, str, str, str, str]]:
@@ -197,6 +208,44 @@ CheckRepoResult = Union[
 ]
 
 
+def _check_commit_filters(repo: str, commit_hash: str, commit_msg: str) -> Optional[str]:
+    """
+    Apply all configured filters (edit threshold, file patterns, folder patterns, message strings)
+    to a commit. Returns a reason string if the commit should be skipped, None if it passes all filters.
+    """
+    # 1. Check commit message ignore strings (fast, no API call)
+    skip_reason = _should_skip_by_commit_message(commit_msg)
+    if skip_reason:
+        return skip_reason
+
+    # 2. Fetch commit details for stats and file list
+    data = _github_api_call(f"repos/{repo}/commits/{commit_hash}")
+    if not data or not isinstance(data, dict):
+        logger.warning("Could not fetch commit details for %s/%s", repo, commit_hash[:7])
+        return None  # Can't determine, don't skip
+
+    # 3. Check edit threshold
+    min_threshold = config.get_min_edit_threshold()
+    if min_threshold > 0:
+        stats = data.get("stats")
+        if stats and isinstance(stats, dict):
+            additions = stats.get("additions", 0)
+            deletions = stats.get("deletions", 0)
+            total = additions + deletions
+            if total < min_threshold:
+                return (
+                    f"total changes ({total} lines) below MIN_EDIT_THRESHOLD ({min_threshold})"
+                )
+
+    # 4. Check file/folder ignore patterns
+    files = data.get("files")
+    skip_reason = _check_ignore_patterns(files if files else [])
+    if skip_reason:
+        return skip_reason
+
+    return None  # Passes all filters
+
+
 def check_repo(repo: str) -> CheckRepoResult:
     """
     Check a single repository for new commits.
@@ -226,16 +275,15 @@ def check_repo(repo: str) -> CheckRepoResult:
             "New commit detected in %s: %s (was %s)", repo, commit_hash[:7], last_hash[:7]
         )
 
-        # Check if this commit should be ignored based on changed files
-        ignore_patterns = config.get_ignore_file_patterns()
-        if ignore_patterns:
-            files_changed = _get_commit_files(repo, commit_hash)
-            if _should_ignore_commit(files_changed, ignore_patterns):
-                logger.info(
-                    "Ignoring commit %s in %s — all changed files match ignore patterns: %s",
-                    commit_hash[:7], repo, files_changed,
-                )
-                return (True, commit_hash, "ignored", commit_msg, author_name, commit_date, commit_url)
+        # Apply filters before reporting as an update
+        skip_reason = _check_commit_filters(repo, commit_hash, commit_msg)
+        if skip_reason:
+            logger.info(
+                "Skipping notification for %s %s: %s", repo, commit_hash[:7], skip_reason
+            )
+            # Still update state to avoid re-notifying on skipped commits
+            state_manager.set_last_seen(state_file, repo, commit_hash)
+            return (True, None)
 
         return (True, commit_hash, "new_commit", commit_msg, author_name, commit_date, commit_url)
     else:

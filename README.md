@@ -49,6 +49,7 @@ python bot.py
 - ✅ **Token support** — GitHub token for 5,000 API requests/hour
 - ✅ **State persistence** — never sends duplicate notifications, survives restarts
 - ✅ **Clean channels** — auto-deletes command messages after responding
+- ✅ **Smart notification filtering** — customize thresholds and ignore patterns to reduce spam
 - ✅ **Comprehensive logging** — rotating log files with debug-level detail
 - ✅ **Input sanitization** — accepts any repo URL format (`owner/repo`, full URL, `.git` suffix)
 - ✅ **Access control** — `!add-repo` / `!remove-repo` restricted to admins & moderators only
@@ -103,6 +104,10 @@ Edit `.env` with your settings:
 | `MAX_RETRIES` | ❌ No | `3` | Retry attempts on rate limit errors |
 | `HELP_COMMAND` | ❌ No | `"help"` | Custom name for the help command (e.g. `repos-help`) |
 | `RETRY_DELAY` | ❌ No | `5` | Seconds between retries |
+| `MIN_EDIT_THRESHOLD` | ❌ No | `0` | Minimum lines changed (additions + deletions) to trigger a notification. `0` = no threshold |
+| `IGNORE_FILE_PATTERNS` | ❌ No | `""` | Comma-separated glob patterns for files to ignore (e.g. `README.md,*.txt`). Notification suppressed when ALL files match |
+| `IGNORE_FOLDER_PATTERNS` | ❌ No | `""` | Comma-separated folder substrings to ignore (e.g. `docs/,assets/`). Notification suppressed when ALL files are in ignored folders |
+| `IGNORE_STRINGS` | ❌ No | `""` | Comma-separated strings in commit messages to suppress (case-insensitive, e.g. `typo,chore,dependabot`) |
 
 ### 4. Run the Bot
 
@@ -146,6 +151,7 @@ python bot.py
 4. **State tracked** — saves the last-seen commit hash to `.repo-state`, ensuring no duplicate notifications
 5. **Commands** — `!add-repo` and `!remove-repo` update `repos.txt` in real time
 6. **Access control** — `!add-repo` and `!remove-repo` are restricted to server administrators and moderators
+7. **Smart filtering** — commits are checked against `MIN_EDIT_THRESHOLD`, `IGNORE_FILE_PATTERNS`, `IGNORE_FOLDER_PATTERNS`, and `IGNORE_STRINGS` before sending notifications. Filtered commits are still tracked to avoid re-notification
 
 ### Notification Channel Selection
 
@@ -314,6 +320,7 @@ A: Not yet, but a `Dockerfile` is planned for future releases.
 - **No database** — all data is stored in plain text files with no external service dependencies
 - **Process visibility** — tokens are passed as environment variables, not hardcoded in scripts
 - **Access control** — destructive commands (`!add-repo`, `!remove-repo`) are restricted to admins and moderators only
+- **No data leakage** — all filtering (edit thresholds, file/folder ignore patterns, message strings) is applied server-side. Filtered commits are never sent to Discord
 
 ---
 

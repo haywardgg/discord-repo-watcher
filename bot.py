@@ -205,9 +205,6 @@ async def check_loop():
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
                     )
-                elif reason == "ignored":
-                    # Silently acknowledge (update state, no notification)
-                    watcher.confirm_notification(repo, commit_hash)
                 elif reason == "new_commit":
                     avatar_url = watcher.get_repo_avatar_url(repo)
                     if await send_commit_notification(
@@ -344,10 +341,6 @@ async def check_now(ctx: commands.Context):
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
                     )
-                    updates += 1
-                elif reason == "ignored":
-                    # Silently acknowledge (update state, no notification)
-                    watcher.confirm_notification(repo, commit_hash)
                     updates += 1
                 elif reason == "new_commit":
                     avatar_url = watcher.get_repo_avatar_url(repo)
