@@ -60,6 +60,19 @@ def get_retry_delay() -> int:
     return int(os.getenv("RETRY_DELAY", "5"))
 
 
+def get_ignore_file_patterns() -> list[str]:
+    """
+    Get the ignore file patterns from the environment.
+    Returns a list of lowercase substrings. If a commit's changed files ALL match
+    any of these patterns, the notification is suppressed.
+    Example: IGNORE_FILE_PATTERNS="README.md,.gitignore,LICENSE"
+    """
+    raw = os.getenv("IGNORE_FILE_PATTERNS", "")
+    if not raw or not raw.strip():
+        return []
+    return [pattern.strip().lower() for pattern in raw.split(",") if pattern.strip()]
+
+
 def get_help_command() -> str:
     """Get the custom help command name (default: help)."""
     return os.getenv("HELP_COMMAND", "help").strip().lower()
