@@ -212,19 +212,31 @@ def _check_commit_filters(repo: str, commit_hash: str, commit_msg: str) -> Optio
     """
     Apply all configured filters (edit threshold, file patterns, folder patterns, message strings)
     to a commit. Returns a reason string if the commit should be skipped, None if it passes all filters.
+    
+    Only makes the additional commit-detail API call when a filter that needs it is configured.
     """
     # 1. Check commit message ignore strings (fast, no API call)
     skip_reason = _should_skip_by_commit_message(commit_msg)
     if skip_reason:
         return skip_reason
 
-    # 2. Fetch commit details for stats and file list
+    # 2. Determine if we need to fetch commit details
+    needs_details = (
+        config.get_min_edit_threshold() > 0
+        or bool(config.get_ignore_file_patterns())
+        or bool(config.get_ignore_folder_patterns())
+    )
+
+    if not needs_details:
+        return None  # No remaining filters configured, pass
+
+    # 3. Fetch commit details for stats and file list
     data = _github_api_call(f"repos/{repo}/commits/{commit_hash}")
     if not data or not isinstance(data, dict):
         logger.warning("Could not fetch commit details for %s/%s", repo, commit_hash[:7])
         return None  # Can't determine, don't skip
 
-    # 3. Check edit threshold
+    # 4. Check edit threshold
     min_threshold = config.get_min_edit_threshold()
     if min_threshold > 0:
         stats = data.get("stats")
@@ -237,7 +249,7 @@ def _check_commit_filters(repo: str, commit_hash: str, commit_msg: str) -> Optio
                     f"total changes ({total} lines) below MIN_EDIT_THRESHOLD ({min_threshold})"
                 )
 
-    # 4. Check file/folder ignore patterns
+    # 5. Check file/folder ignore patterns
     files = data.get("files")
     skip_reason = _check_ignore_patterns(files if files else [])
     if skip_reason:

@@ -8,7 +8,6 @@ import asyncio
 import logging
 import logging.handlers
 import os
-import signal
 import sys
 
 import discord
@@ -130,12 +129,18 @@ async def send_commit_notification(
     if len(description) > 2048:
         description = description[:2045] + "..."
 
+    # Parse the commit timestamp safely
+    try:
+        embed_timestamp = discord.utils.parse_time(commit_date) if commit_date else discord.utils.utcnow()
+    except (ValueError, TypeError, Exception):
+        embed_timestamp = discord.utils.utcnow()
+
     embed = discord.Embed(
         title="📦 New Commit Detected",
         description=description,
         url=f"https://github.com/{repo}",
         color=COMMIT_EMBED_COLOR,
-        timestamp=discord.utils.parse_time(commit_date) if commit_date else discord.utils.utcnow(),
+        timestamp=embed_timestamp,
     )
     embed.add_field(
         name="📝 Commit",
