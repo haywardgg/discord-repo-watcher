@@ -40,19 +40,7 @@ python bot.py
 
 ---
 
-## Features
 
-- ✅ **Interactive commands** — `!add-repo`, `!remove-repo`, `!list-repos`, `!check-now`
-- ✅ **Automated monitoring** — checks all watched repos every 5 minutes (configurable)
-- ✅ **Rich Discord embeds** — commit details, author, timestamp, direct links, and repo owner's avatar
-- ✅ **Rate limit handling** — detects GitHub API rate limits and retries automatically
-- ✅ **Token support** — GitHub token for 5,000 API requests/hour
-- ✅ **State persistence** — never sends duplicate notifications, survives restarts
-- ✅ **Clean channels** — auto-deletes command messages after responding
-- ✅ **Smart notification filtering** — customize thresholds and ignore patterns to reduce spam
-- ✅ **Comprehensive logging** — rotating log files with debug-level detail
-- ✅ **Input sanitization** — accepts any repo URL format (`owner/repo`, full URL, `.git` suffix)
-- ✅ **Access control** — `!add-repo` / `!remove-repo` restricted to admins & moderators only
 
 ---
 
