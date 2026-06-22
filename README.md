@@ -48,8 +48,9 @@ python bot.py
 - ✅ **Rate limit handling** — detects GitHub API rate limits and retries automatically
 - ✅ **Token support** — GitHub token for 5,000 API requests/hour
 - ✅ **State persistence** — never sends duplicate notifications, survives restarts
-- ✅ **Clean channels** — auto-deletes command messages after responding
+- ✅ **Clean channels** — auto-deletes bot response messages after 10 seconds (30 seconds for longer messages like `!help` and `!list-repos`)
 - ✅ **Smart notification filtering** — customize thresholds and ignore patterns to reduce spam
+- ✅ **One-notification-per-repo** — enable `DELETE_PREVIOUS_NOTIFICATIONS` to keep only the latest commit embed per repo in the channel
 - ✅ **Comprehensive logging** — rotating log files with debug-level detail
 - ✅ **Input sanitization** — accepts any repo URL format (`owner/repo`, full URL, `.git` suffix)
 - ✅ **Access control** — `!add-repo` / `!remove-repo` restricted to admins & moderators only
@@ -108,6 +109,7 @@ Edit `.env` with your settings:
 | `IGNORE_FILE_PATTERNS` | ❌ No | `""` | Comma-separated glob patterns for files to ignore (e.g. `README.md,*.txt`). Notification suppressed when ALL files match |
 | `IGNORE_FOLDER_PATTERNS` | ❌ No | `""` | Comma-separated folder substrings to ignore (e.g. `docs/,assets/`). Notification suppressed when ALL files are in ignored folders |
 | `IGNORE_STRINGS` | ❌ No | `""` | Comma-separated strings in commit messages to suppress (case-insensitive, e.g. `typo,chore,dependabot`) |
+| `DELETE_PREVIOUS_NOTIFICATIONS` | ❌ No | `false` | When `true`, deletes a repo's previous commit notification embed from the channel before posting a new one, keeping only one notification per repo |
 
 ### 4. Run the Bot
 
@@ -152,6 +154,7 @@ python bot.py
 5. **Commands** — `!add-repo` and `!remove-repo` update `repos.txt` in real time
 6. **Access control** — `!add-repo` and `!remove-repo` are restricted to server administrators and moderators
 7. **Smart filtering** — commits are checked against `MIN_EDIT_THRESHOLD`, `IGNORE_FILE_PATTERNS`, `IGNORE_FOLDER_PATTERNS`, and `IGNORE_STRINGS` before sending notifications. Filtered commits are still tracked to avoid re-notification
+8. **Delete previous notifications** — when `DELETE_PREVIOUS_NOTIFICATIONS=true`, the bot deletes a repo's previous notification embed from the channel before posting a new one, keeping exactly one notification per repo
 
 ### Notification Channel Selection
 
@@ -234,9 +237,11 @@ python bot.py
 | `watcher.py` | GitHub API calls and commit checking logic | ❌ No |
 | `repo_manager.py` | Add/remove/list repositories | ❌ No |
 | `state_manager.py` | Persist last-seen commit hashes | ❌ No |
+| `notification_tracker.py` | Track last notification message IDs per repo (for delete previous notifications feature) | ❌ No |
 | `.env` | Your configuration (gitignored) | ✅ Yes |
 | `repos.txt` | List of repositories to watch | ✅ Yes |
 | `.repo-state` | Commit hash tracking state (auto-generated) | ⚠️ Reset to re-notify |
+| `.notification-messages` | Tracked message IDs for deleting previous notifications (auto-generated when feature is enabled) | ❌ No |
 | `repo-watcher.log` | Application logs (auto-generated) | ❌ No |
 
 ---

@@ -97,6 +97,24 @@ def get_ignore_folder_patterns() -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
+def get_delete_previous_notifications() -> bool:
+    """
+    Whether to delete a repo's previous notification before posting a new one.
+    When enabled, there will only ever be one notification embed per repo in the chat.
+    Defaults to False (off).
+    Set DELETE_PREVIOUS_NOTIFICATIONS=true in .env to enable.
+    """
+    return os.getenv("DELETE_PREVIOUS_NOTIFICATIONS", "false").strip().lower() == "true"
+
+
+def get_notification_tracking_path() -> str:
+    """Get the path to the notification message tracking file."""
+    return os.getenv(
+        "NOTIFICATION_TRACKING_FILE",
+        os.path.join(SCRIPT_DIR, ".notification-messages"),
+    )
+
+
 def get_ignore_strings() -> list[str]:
     """
     Get a list of strings to ignore in commit messages.

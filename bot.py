@@ -14,6 +14,7 @@ import discord
 from discord.ext import commands, tasks
 
 import config
+import notification_tracker
 import repo_manager
 import watcher
 
@@ -76,7 +77,7 @@ def is_admin_or_mod():
             return True
 
         # Check the author's permissions in the current channel
-        permissions = ctx.author.guild_permissions if ctx.guild else discord.Permissions()
+        permissions = ctx.author.guild_permissions if isinstance(ctx.author, discord.Member) else discord.Permissions()
 
         # Administrators have full control
         if permissions.administrator:
@@ -97,11 +98,12 @@ def is_admin_or_mod():
 
 @bot.event
 async def on_ready():
+    assert bot.user is not None, "bot.user is None in on_ready"
     logger.info("Bot is ready! Logged in as %s (ID: %s)", bot.user, bot.user.id)
     logger.info("Watched repo list: %s", repo_list_path)
     repos = repo_manager.load_repos(repo_list_path)
     logger.info("Currently tracking %d repo(s)", len(repos))
-    check_loop.start()
+    check_loop.start()  # type: ignore[attr-defined]
 
 
 # ── Notification Helper ───────────────────────────────────────────────────────
@@ -110,7 +112,7 @@ COMMIT_EMBED_COLOR = 5814783  # A soft green
 
 
 async def send_commit_notification(
-    channel: discord.TextChannel,
+    channel: discord.abc.Messageable,
     repo: str,
     commit_hash: str,
     commit_msg: str,
@@ -118,12 +120,12 @@ async def send_commit_notification(
     commit_date: str,
     commit_url: str,
     avatar_url: str | None = None,
-) -> bool:
+) -> discord.Message | None:
     """
     Send a rich embed about a new commit to the given channel.
     Uses the repository owner's avatar as the embed thumbnail
     if available, otherwise falls back to the generic GitHub logo.
-    Returns True on success.
+    Returns the sent Message on success, None on failure.
     """
     description = f"**Repository:** {repo}\n**Author:** {author}"
     if len(description) > 2048:
@@ -160,7 +162,60 @@ async def send_commit_notification(
     else:
         embed.set_thumbnail(url="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png")
 
-    await channel.send(embed=embed)
+    message = await channel.send(embed=embed)
+    return message
+
+
+async def _handle_commit_update(
+    channel: discord.abc.Messageable,
+    repo: str,
+    commit_hash: str,
+    commit_msg: str,
+    author: str,
+    commit_date: str,
+    commit_url: str,
+    avatar_url: str | None = None,
+) -> bool:
+    """
+    Send a commit notification, optionally deleting the previous one for this repo.
+
+    If DELETE_PREVIOUS_NOTIFICATIONS is enabled, deletes the old notification
+    message before sending the new one, so there is only ever one embed per repo.
+
+    Returns True on success.
+    """
+    # If deletion is enabled, try to remove the previous notification
+    if config.get_delete_previous_notifications():
+        tracker_path = config.get_notification_tracking_path()
+        previous = notification_tracker.get_notification_message(tracker_path, repo)
+        if previous:
+            prev_channel_id, prev_message_id = previous
+            try:
+                guild = getattr(channel, "guild", None)
+                prev_channel = guild.get_channel(prev_channel_id) if guild else bot.get_channel(prev_channel_id)
+                if prev_channel and isinstance(prev_channel, discord.TextChannel):
+                    prev_message = await prev_channel.fetch_message(prev_message_id)
+                    await prev_message.delete()
+                    logger.debug("Deleted previous notification for %s (msg %d)", repo, prev_message_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException, Exception) as e:
+                logger.debug("Could not delete previous notification for %s: %s", repo, e)
+
+    # Send the new notification
+    message = await send_commit_notification(
+        channel, repo, commit_hash,
+        commit_msg, author, commit_date, commit_url,
+        avatar_url=avatar_url,
+    )
+    if message is None:
+        return False
+
+    # Track the new message if deletion is enabled
+    if config.get_delete_previous_notifications():
+        tracker_path = config.get_notification_tracking_path()
+        notification_tracker.set_notification_message(
+            tracker_path, repo, message.channel.id, message.id
+        )
+
     return True
 
 
@@ -205,14 +260,14 @@ async def check_loop():
                         f"First seen commit: {commit_hash[:7]}"
                     )
                     avatar_url = watcher.get_repo_avatar_url(repo)
-                    await send_commit_notification(
+                    await _handle_commit_update(
                         notification_channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
                     )
                 elif reason == "new_commit":
                     avatar_url = watcher.get_repo_avatar_url(repo)
-                    if await send_commit_notification(
+                    if await _handle_commit_update(
                         notification_channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
@@ -251,7 +306,7 @@ def _find_notification_channel() -> discord.TextChannel | None:
     return None
 
 
-@check_loop.before_loop
+@check_loop.before_loop  # type: ignore[attr-defined]
 async def before_check_loop():
     """Wait until the bot is ready before starting the loop."""
     await bot.wait_until_ready()
@@ -276,12 +331,12 @@ async def add_repo(ctx: commands.Context, *, repo: str):
     try:
         added = repo_manager.add_repo(repo_list_path, repo)
         if added:
-            await ctx.send(f"✅ **{repo}** has been added to the watch list.", delete_after=30)
+            await ctx.send(f"✅ **{repo}** has been added to the watch list.", delete_after=10)
             logger.info("User %s added repo: %s", ctx.author, repo)
         else:
-            await ctx.send(f"⚠️ **{repo}** is already in the watch list.", delete_after=30)
+            await ctx.send(f"⚠️ **{repo}** is already in the watch list.", delete_after=10)
     except ValueError as e:
-        await ctx.send(f"❌ {e}", delete_after=30)
+        await ctx.send(f"❌ {e}", delete_after=10)
 
 
 @bot.command(name="remove-repo", aliases=["remove", "rm"])
@@ -291,10 +346,10 @@ async def remove_repo(ctx: commands.Context, *, repo: str):
     await _delete_command(ctx)
     removed = repo_manager.remove_repo(repo_list_path, repo)
     if removed:
-        await ctx.send(f"✅ **{repo}** has been removed from the watch list.", delete_after=30)
+        await ctx.send(f"✅ **{repo}** has been removed from the watch list.", delete_after=10)
         logger.info("User %s removed repo: %s", ctx.author, repo)
     else:
-        await ctx.send(f"⚠️ **{repo}** was not found in the watch list.", delete_after=30)
+        await ctx.send(f"⚠️ **{repo}** was not found in the watch list.", delete_after=10)
 
 
 @bot.command(name="list-repos", aliases=["list", "repos"])
@@ -303,11 +358,11 @@ async def list_repos(ctx: commands.Context):
     await _delete_command(ctx)
     repos = repo_manager.load_repos(repo_list_path)
     if not repos:
-        await ctx.send("📭 No repositories are being watched. Use `!add-repo <owner/repo>` to add one.", delete_after=30)
+        await ctx.send("📭 No repositories are being watched. Use `!add-repo <owner/repo>` to add one.", delete_after=10)
         return
 
     lines = "\n".join(f"• `{r}`" for r in repos)
-    await ctx.send(f"**📋 Watched Repositories ({len(repos)}):**\n{lines}", delete_after=60)
+    await ctx.send(f"**📋 Watched Repositories ({len(repos)}):**\n{lines}", delete_after=30)
 
 
 @bot.command(name="check-now", aliases=["check", "scan"])
@@ -316,10 +371,10 @@ async def check_now(ctx: commands.Context):
     await _delete_command(ctx)
     repos = repo_manager.load_repos(repo_list_path)
     if not repos:
-        await ctx.send("📭 No repositories to check.", delete_after=30)
+        await ctx.send("📭 No repositories to check.", delete_after=10)
         return
 
-    await ctx.send(f"🔍 Checking {len(repos)} repo(s)... This may take a moment.", delete_after=120)
+    await ctx.send(f"🔍 Checking {len(repos)} repo(s)... This may take a moment.", delete_after=10)
 
     errors = 0
     updates = 0
@@ -331,17 +386,17 @@ async def check_now(ctx: commands.Context):
             if not has_update and result[1] is not None:
                 error_msg = result[1]
                 logger.warning("Error checking %s: %s", repo, error_msg)
-                await ctx.send(f"⚠️ **{repo}** - {error_msg}", delete_after=60)
+                await ctx.send(f"⚠️ **{repo}** - {error_msg}", delete_after=10)
                 errors += 1
             elif has_update and len(result) > 2:
                 _, commit_hash, reason, commit_msg, author, commit_date, commit_url = result
                 if reason == "first_seen":
                     await ctx.send(
                         f"⚠️ **{repo}** - Now tracking! First seen commit: {commit_hash[:7]}",
-                        delete_after=60,
+                        delete_after=10,
                     )
                     avatar_url = watcher.get_repo_avatar_url(repo)
-                    await send_commit_notification(
+                    await _handle_commit_update(
                         ctx.channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
@@ -349,7 +404,7 @@ async def check_now(ctx: commands.Context):
                     updates += 1
                 elif reason == "new_commit":
                     avatar_url = watcher.get_repo_avatar_url(repo)
-                    await send_commit_notification(
+                    await _handle_commit_update(
                         ctx.channel, repo, commit_hash,
                         commit_msg, author, commit_date, commit_url,
                         avatar_url=avatar_url,
@@ -364,7 +419,7 @@ async def check_now(ctx: commands.Context):
         await asyncio.sleep(1)
 
     summary = f"✅ Scan complete. {updates} update(s) sent, {errors} error(s)."
-    await ctx.send(summary, delete_after=60)
+    await ctx.send(summary, delete_after=10)
 
 
 # ── Help Command ──────────────────────────────────────────────────────────────
@@ -412,7 +467,7 @@ def _register_help_command():
             value=f"Show this help message.\n*Aliases: {prefix}commands*",
             inline=False,
         )
-        await ctx.send(embed=embed, delete_after=120)
+        await ctx.send(embed=embed, delete_after=30)
 
 
 _register_help_command()
@@ -434,7 +489,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         await ctx.send(
             "❌ You don't have permission to use this command. "
             "Only server admins and moderators can use it.",
-            delete_after=30,
+            delete_after=10,
         )
         logger.warning(
             "User %s tried to use %s without permission: %s",
@@ -444,7 +499,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 
     # Log other errors
     logger.error("Command error in %s: %s", ctx.command, error, exc_info=True)
-    await ctx.send("❌ An unexpected error occurred.", delete_after=30)
+    await ctx.send("❌ An unexpected error occurred.", delete_after=10)
 
 
 # ── Main Entry Point ──────────────────────────────────────────────────────────

@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Shortened bot response message lifetimes** — All bot response messages now auto-delete after 10 seconds. `!help` embed and `!list-repos` output auto-delete after 30 seconds to give users time to read the longer messages.
+
+### Fixed
+
+- **Pylance type error on `bot.user` in `on_ready()`** — Added `assert bot.user is not None` to narrow the `Optional[ClientUser]` type, resolving the "id is not a known attribute of None" diagnostic.
+
 ### Added
+
+- **Delete previous notifications option** — New `.env` setting `DELETE_PREVIOUS_NOTIFICATIONS` (default `false`). When set to `true`, the bot deletes a repo's previous commit notification embed before posting a new one, keeping exactly one notification per repo in the chat channel.
+- **`notification_tracker.py`** — New module that tracks the Discord channel ID and message ID of each repo's last notification in a `.notification-messages` file.
+- **`_handle_commit_update()` in `bot.py`** — New wrapper function that conditionally deletes old notifications and tracks new ones when the feature is enabled.
+- **Config functions in `config.py`** — `get_delete_previous_notifications()` and `get_notification_tracking_path()`.
 
 - **Smart commit filtering** — New `.env` options to reduce notification spam:
   - `MIN_EDIT_THRESHOLD` — Minimum total lines changed (additions + deletions) required to trigger a notification. Ignores tiny commits like typos or single-line README fixes.

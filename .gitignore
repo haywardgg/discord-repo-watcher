@@ -4,6 +4,7 @@ repos.txt
 
 # Ignore runtime-generated state and log files
 .repo-state
+.notification-messages
 repo-watcher.log
 
 # Python bytecode and cache
