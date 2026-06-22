@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Shortened bot response message lifetimes** — All bot response messages now auto-delete after 10 seconds. `!help` embed and `!list-repos` output auto-delete after 30 seconds to give users time to read the longer messages.
+- **`!help` and `!list-repos` now send results via DM** — Keeps channels completely clean. Falls back to in-channel with auto-delete after 30 seconds if the user has DMs disabled.
+- **Shortened command response lifetimes** — All in-channel command response messages now auto-delete after 10 seconds.
 
 ### Fixed
 

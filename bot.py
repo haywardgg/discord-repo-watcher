@@ -354,7 +354,7 @@ async def remove_repo(ctx: commands.Context, *, repo: str):
 
 @bot.command(name="list-repos", aliases=["list", "repos"])
 async def list_repos(ctx: commands.Context):
-    """List all currently watched repositories."""
+    """List all currently watched repositories (sent via DM)."""
     await _delete_command(ctx)
     repos = repo_manager.load_repos(repo_list_path)
     if not repos:
@@ -362,7 +362,11 @@ async def list_repos(ctx: commands.Context):
         return
 
     lines = "\n".join(f"• `{r}`" for r in repos)
-    await ctx.send(f"**📋 Watched Repositories ({len(repos)}):**\n{lines}", delete_after=30)
+    content = f"**📋 Watched Repositories ({len(repos)}):**\n{lines}"
+    try:
+        await ctx.author.send(content)
+    except (discord.Forbidden, discord.HTTPException):
+        await ctx.send(content, delete_after=30)
 
 
 @bot.command(name="check-now", aliases=["check", "scan"])
@@ -467,7 +471,10 @@ def _register_help_command():
             value=f"Show this help message.\n*Aliases: {prefix}commands*",
             inline=False,
         )
-        await ctx.send(embed=embed, delete_after=30)
+        try:
+            await ctx.author.send(embed=embed)
+        except (discord.Forbidden, discord.HTTPException):
+            await ctx.send(embed=embed, delete_after=30)
 
 
 _register_help_command()

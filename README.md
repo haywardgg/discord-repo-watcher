@@ -48,7 +48,7 @@ python bot.py
 - ✅ **Rate limit handling** — detects GitHub API rate limits and retries automatically
 - ✅ **Token support** — GitHub token for 5,000 API requests/hour
 - ✅ **State persistence** — never sends duplicate notifications, survives restarts
-- ✅ **Clean channels** — auto-deletes bot response messages after 10 seconds (30 seconds for longer messages like `!help` and `!list-repos`)
+- ✅ **Clean channels** — `!help` and `!list-repos` send results via DM to keep channels clean; other command responses auto-delete after 10 seconds. Falls back to in-channel with auto-delete if DMs are disabled.
 - ✅ **Smart notification filtering** — customize thresholds and ignore patterns to reduce spam
 - ✅ **One-notification-per-repo** — enable `DELETE_PREVIOUS_NOTIFICATIONS` to keep only the latest commit embed per repo in the channel
 - ✅ **Comprehensive logging** — rotating log files with debug-level detail
