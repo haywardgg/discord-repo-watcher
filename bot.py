@@ -16,6 +16,7 @@ from discord.ext import commands, tasks
 import config
 import notification_tracker
 import repo_manager
+import state_manager
 import watcher
 
 # ── Logging Setup ──────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ logger.addHandler(console_handler)
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # Required for on_member_remove event (leave cleanup)
 
 bot = commands.Bot(
     command_prefix="!",
@@ -173,6 +175,72 @@ async def on_message(message: discord.Message) -> None:
         await message.delete()
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         pass
+
+
+@bot.event
+async def on_member_remove(member: discord.Member) -> None:
+    """When a member leaves, remove all repos they added and their commit embeds."""
+    state_file = config.get_state_file_path()
+    tracker_path = config.get_notification_tracking_path()
+    repos_with_owners = repo_manager.load_repos_with_owners(repo_list_path)
+    removed: list[str] = []
+    embed_deleted_count = 0
+    for repo, owner_id in list(repos_with_owners.items()):
+        if owner_id == member.id:
+            del repos_with_owners[repo]
+            state_manager.remove_repo(state_file, repo)
+            removed.append(repo)
+            # Try to delete the commit notification embed from the channel
+            tracked = notification_tracker.get_notification_message(tracker_path, repo)
+            if tracked:
+                channel_id, message_id = tracked
+                guild = member.guild
+                channel = guild.get_channel(channel_id) if guild else None
+                if channel and isinstance(channel, discord.TextChannel):
+                    try:
+                        msg = await channel.fetch_message(message_id)
+                        await msg.delete()
+                        embed_deleted_count += 1
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        pass
+                notification_tracker.remove_notification_message(tracker_path, repo)
+    if removed:
+        repo_manager.save_repos(repo_list_path, repos_with_owners)
+        logger.info(
+            "Member %s (ID: %d) left — removed %d repo(s), deleted %d embed(s): %s",
+            member, member.id, len(removed), embed_deleted_count, ", ".join(removed),
+        )
+        # Post a light-hearted announcement in the repo-watcher channel
+        repo_list = "\n".join(f"• `{r}`" for r in removed)
+        channel_msgs = [
+            f"👋 **{member.display_name}** has left the building… and taken their toys with them!",
+            f"🧹 Cleanup crew reporting in — **{member.display_name}** dipped, so we yeeted their {len(removed)} repo(s):",
+            f"🚪 **{member.display_name}** ghosted us. Their {len(removed)} repo(s) have been escorted out.",
+            f"🛸 **{member.display_name}** beamed up. Repo scanner disengaged. {len(removed)} repo(s) removed from watch.",
+            f"💨 **{member.display_name}** vanished into thin air. Their watch list contributions have been respectfully retired.",
+        ]
+        import random
+        channel_text = f"{random.choice(channel_msgs)}\n{repo_list}"
+        announce_channel = _find_notification_channel()
+        if announce_channel:
+            try:
+                msg = await announce_channel.send(channel_text)
+                await msg.delete(delay=60)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+        # DM the server owner
+        guild_owner = member.guild.owner
+        if guild_owner and guild_owner.id != member.id:
+            try:
+                await guild_owner.send(
+                    f"📋 **Member Left — Repo Cleanup**\n"
+                    f"**{member.display_name}** (ID: `{member.id}`) has left the server.\n"
+                    f"Their {len(removed)} repository(ies) have been removed from the watch list "
+                    f"and {embed_deleted_count} commit embed(s) deleted:\n"
+                    + "\n".join(f"• `{r}`" for r in removed)
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                pass
 
 
 @bot.event
