@@ -47,17 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repository owner avatar in commit embeds** — Commit notifications now display the repository owner's profile photo (user or organization avatar) as the embed thumbnail instead of the generic GitHub logo. Fetched once from the GitHub API and cached in-memory; falls back to the GitHub logo gracefully on failure.
 - **`get_repo_avatar_url()` in `watcher.py`** — New function to fetch and cache the repository owner's avatar URL from the GitHub API.
 - **Configurable help command name** — Set `HELP_COMMAND` in your `.env` file to change the help command (e.g. `HELP_COMMAND="repos-help"` makes it `!repos-help`). Defaults to `help` for backwards compatibility. `!commands` always works as an alias regardless of the configured name.
-- **Access control for `!add-repo` and `!remove-repo` commands** — Only server administrators and moderators can now use these commands. Regular users receive a permission error. The check uses Discord's built-in permission system:
-  - Users with `Administrator` permission are allowed
-  - Users with moderator-level permissions (`Manage Server`, `Manage Messages`, `Kick Members`, `Ban Members`) are allowed
-  - The bot owner is allowed unconditionally
-- **Global error handler for permission errors** — Catches `MissingPermissions` exceptions and sends a user-friendly "Only server admins and moderators can use this command" message
-- **`is_admin_or_mod()` check decorator** — Reusable permission check function that can be applied to any command
+- **Access control for `!add-repo` and `!remove-repo` commands** — `!add-repo` uses `is_admin_or_mod_or_member()`: admins and mods always allowed; regular members allowed if joined ≥ 24 hours ago. `!remove-repo` checks repo ownership in-line: admins/mods can remove any; members can only remove their own. Non-owners get a friendly message showing who added the repo.
+- **Global error handler for `CheckFailure` and `MissingPermissions`** — Friendly messages for 24h gate violations and permission-denied scenarios.
+- **`is_admin_or_mod()` / `is_admin_or_mod_or_member()` check decorators** — Reusable permission check functions.
 
 ### Changed
 
-- **Help command updated** — `!help` now shows "Restricted to Admins & Moderators" on `!add-repo` and `!remove-repo` entries
-- **README updated** — Commands table shows access restriction, Features list includes access control, How It Works section documents the permission model, FAQ added about who can use restricted commands, Troubleshooting covers permission-denied scenarios, Security section documents access control
+- **Help command updated** — `!help` embed shows "Admins, Mods, or members (24h+)" on `!add-repo` and "Admins/Mods can remove any; members can remove their own" on `!remove-repo`
+- **README updated** — Comprehensive rewrite to reflect all new features: DM delivery, 24h member gate, repo verification, URL rejection, ownership tracking, member leave cleanup, strict command channel, and shortened message lifetimes.
+- **Member leave cleanup** — When a member leaves the server, the bot automatically removes all their repos from `repos.txt` and `.repo-state`, deletes their commit notification embeds from Discord, clears notification tracking data, notifies the server owner via DM, and posts a randomly selected light-hearted farewell message in the repo-watcher channel (auto-deletes after 60s).
+- **`on_member_remove` event in `bot.py`** — Handles full cleanup when members leave.
+- **Server Members Intent enabled** — `intents.members = True` in `bot.py` (required for `on_member_remove`).
 
 ## [0.1.0] - 2024-01-01
 
