@@ -131,7 +131,7 @@ python bot.py
 | `!add-repo <owner/repo>` | `!add` | Add a repository to watch *(Admins, Mods, or members 24h+)* |
 | `!remove-repo <owner/repo>` | `!remove`, `!rm` | Remove a repository *(Admins/Mods: any; members: own repos only)* |
 | `!list-repos` | `!list`, `!repos` | Show all watched repositories |
-| `!check-now` | `!check`, `!scan` | Manually check all repos for new commits |
+| `!check-now` | `!check`, `!scan` | Manually check all repos for new commits *(Admins & Moderators only)* |
 | `!help` | `!commands` | Show available commands |
 
 ### Examples

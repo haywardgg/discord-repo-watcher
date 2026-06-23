@@ -587,6 +587,7 @@ async def list_repos(ctx: commands.Context):
 
 
 @bot.command(name="check-now", aliases=["check", "scan"])
+@is_admin_or_mod()
 async def check_now(ctx: commands.Context):
     """Manually check all watched repositories for new commits now."""
     await _delete_command(ctx)
@@ -680,7 +681,7 @@ def _register_help_command():
         )
         embed.add_field(
             name=f"{prefix}check-now",
-            value=f"Manually check all repos for new commits right now.\n*Aliases: {prefix}check, {prefix}scan*",
+            value=f"Manually check all repos for new commits right now.\n*Aliases: {prefix}check, {prefix}scan*\n*Restricted to Admins & Moderators*",
             inline=False,
         )
         embed.add_field(

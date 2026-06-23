@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`!add-repo` access expanded** — Members who joined ≥ 24 hours ago can now add repos. Newer members get a friendly message telling them to wait or ask an admin.
 - **Repository URL rejection** — `!add-repo` now requires the short `owner/repo` format. Full URLs are rejected to prevent Discord timeout penalties.
 - **Repository existence verification** — `!add-repo` verifies the repo exists on GitHub via the API before saving.
+- **`!check-now` / `!check` / `!scan` restricted to admins & moderators** — Manual scanning is now admin/moderator-only to prevent abuse. Non-admin users receive the standard permission error via the global error handler.
 
 ### Fixed
 
