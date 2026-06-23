@@ -134,6 +134,17 @@ def _github_api_call(endpoint: str) -> Optional[list]:
     return None
 
 
+def repo_exists(repo: str) -> bool:
+    """
+    Verify that a repository exists on GitHub and is accessible.
+    Returns True if the repo exists, False otherwise.
+    """
+    data = _github_api_call(f"repos/{repo}")
+    if data and isinstance(data, dict):
+        return True
+    return False
+
+
 def get_repo_avatar_url(repo: str) -> Optional[str]:
     """
     Fetch the avatar URL of a repository's owner (user or organisation).

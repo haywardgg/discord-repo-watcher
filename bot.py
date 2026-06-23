@@ -60,7 +60,7 @@ bot = commands.Bot(
 repo_list_path = config.get_repo_list_path()
 os.makedirs(os.path.dirname(repo_list_path) or ".", exist_ok=True)
 if not os.path.isfile(repo_list_path):
-    repo_manager.save_repos(repo_list_path, [])
+    repo_manager.save_repos(repo_list_path, {})
 
 
 # ── Permission Check ──────────────────────────────────────────────────────────
@@ -94,7 +94,86 @@ def is_admin_or_mod():
     return commands.check(predicate)
 
 
+def is_admin_or_mod_or_member():
+    """
+    Check decorator for !add-repo:
+    - Server admins and moderators: always allowed
+    - Regular members: allowed if joined the server more than 24 hours ago
+    - Otherwise: denied with a message explaining the 24-hour wait
+    """
+    async def predicate(ctx: commands.Context) -> bool:
+        # Allow bot owners unconditionally
+        if ctx.author.id == ctx.bot.owner_id:
+            return True
+
+        # Admins and moderators always allowed
+        if isinstance(ctx.author, discord.Member):
+            permissions = ctx.author.guild_permissions
+            if permissions.administrator:
+                return True
+            if permissions.manage_guild or permissions.manage_messages or permissions.kick_members or permissions.ban_members:
+                return True
+
+            # Regular member — check server join age
+            if ctx.author.joined_at is None:
+                raise commands.CheckFailure(
+                    "⏳ Unable to verify your server join date. "
+                    "Please try again later or ask an admin/moderator for help."
+                )
+            now = discord.utils.utcnow()
+            member_age = now - ctx.author.joined_at
+            if member_age.total_seconds() >= 86_400:  # 24 hours
+                return True
+
+            # Too new — raise a specific error
+            raise commands.CheckFailure(
+                "⏳ You must be a member of this server for at least 24 hours before adding "
+                "repositories. Please wait or ask an admin/moderator for help."
+            )
+
+        # DM channels / non-member — deny
+        raise commands.MissingPermissions(
+            ["administrator", "manage_guild", "manage_messages", "kick_members", "ban_members"]
+        )
+    return commands.check(predicate)
+
+
 # ── Events ────────────────────────────────────────────────────────────────────
+
+# Strict command channel — if configured, silently delete any non-command
+# message in the specified channel.
+_strict_channel = config.get_strict_command_channel().lower()
+
+
+@bot.event
+async def on_message(message: discord.Message) -> None:
+    """Silently delete non-command messages in the strict command channel."""
+    # Always process commands first
+    await bot.process_commands(message)
+
+    # Skip if strict channel not configured
+    if not _strict_channel:
+        return
+
+    # Only act in the configured channel
+    if not isinstance(message.channel, discord.TextChannel) or message.channel.name.lower() != _strict_channel:
+        return
+
+    # Skip bot messages
+    if message.author.bot:
+        return
+
+    # If this message triggered a command (prefix match), leave it — on_command will delete it
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        return
+
+    # Silently delete the non-command message
+    try:
+        await message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+
 
 @bot.event
 async def on_ready():
@@ -324,32 +403,100 @@ async def _delete_command(ctx: commands.Context) -> None:
 
 
 @bot.command(name="add-repo", aliases=["add"])
-@is_admin_or_mod()
+@is_admin_or_mod_or_member()
 async def add_repo(ctx: commands.Context, *, repo: str):
     """Add a repository to watch. Usage: !add-repo owner/repo-name"""
     await _delete_command(ctx)
+    # Reject URLs — users must use owner/repo format to avoid Discord timeout penalties
+    repo_stripped = repo.strip()
+    if "://" in repo_stripped or repo_stripped.startswith(("github.com/", "www.github.com/")):
+        await ctx.send(
+            f"❌ Please use the short format: `owner/repo` (not a URL).\n"
+            f"Example: `microsoft/vscode` instead of `{repo_stripped}`", delete_after=10
+        )
+        return
+    # Clean and validate format
+    cleaned = repo_manager.clean_repo(repo)
+    if not cleaned or "/" not in cleaned:
+        await ctx.send(
+            f"❌ Invalid repository format: '{repo}'. Use `owner/repo` format.", delete_after=10
+        )
+        return
+    # Check if already in the list
+    current = repo_manager.load_repos(repo_list_path)
+    if cleaned in current:
+        await ctx.send(f"⚠️ **{cleaned}** is already in the watch list.", delete_after=10)
+        return
+    # Verify the repo exists on GitHub
+    await ctx.send(f"🔍 Verifying **{cleaned}** exists on GitHub...", delete_after=10)
+    if not watcher.repo_exists(cleaned):
+        await ctx.send(
+            f"❌ **{cleaned}** does not exist or is not accessible on GitHub. "
+            "Check the spelling and ensure it's a public repository.",
+            delete_after=10,
+        )
+        return
+    # Add it with the user's ID for ownership tracking
     try:
-        added = repo_manager.add_repo(repo_list_path, repo)
+        added = repo_manager.add_repo(repo_list_path, cleaned, ctx.author.id)
         if added:
-            await ctx.send(f"✅ **{repo}** has been added to the watch list.", delete_after=10)
-            logger.info("User %s added repo: %s", ctx.author, repo)
+            await ctx.send(f"✅ **{cleaned}** has been added to the watch list.", delete_after=10)
+            logger.info("User %s added repo: %s", ctx.author, cleaned)
         else:
-            await ctx.send(f"⚠️ **{repo}** is already in the watch list.", delete_after=10)
+            await ctx.send(f"⚠️ **{cleaned}** is already in the watch list.", delete_after=10)
     except ValueError as e:
         await ctx.send(f"❌ {e}", delete_after=10)
 
 
 @bot.command(name="remove-repo", aliases=["remove", "rm"])
-@is_admin_or_mod()
 async def remove_repo(ctx: commands.Context, *, repo: str):
     """Remove a repository from the watch list. Usage: !remove-repo owner/repo-name"""
     await _delete_command(ctx)
-    removed = repo_manager.remove_repo(repo_list_path, repo)
+    cleaned = repo_manager.clean_repo(repo)
+    if not cleaned or "/" not in cleaned:
+        await ctx.send(
+            f"❌ Invalid repository format: '{repo}'. Use `owner/repo` format.", delete_after=10
+        )
+        return
+
+    # Check if repo exists
+    if cleaned not in repo_manager.load_repos(repo_list_path):
+        await ctx.send(f"⚠️ **{cleaned}** was not found in the watch list.", delete_after=10)
+        return
+
+    # Permission logic: bot owner, admins, and mods can remove any repo
+    is_admin = False
+    if ctx.author.id == ctx.bot.owner_id:
+        is_admin = True
+    elif isinstance(ctx.author, discord.Member):
+        perms = ctx.author.guild_permissions
+        if perms.administrator or perms.manage_guild or perms.manage_messages or perms.kick_members or perms.ban_members:
+            is_admin = True
+
+    if not is_admin:
+        # Regular member — check ownership
+        repo_owner = repo_manager.get_repo_owner(repo_list_path, cleaned)
+        if repo_owner is None:
+            await ctx.send(
+                f"❌ **{cleaned}** has no recorded owner. Only admins/moderators can remove it.",
+                delete_after=10,
+            )
+            return
+        if repo_owner != ctx.author.id:
+            await ctx.send(
+                f"❌ You can only remove repositories you added yourself. "
+                f"**{cleaned}** was added by <@{repo_owner}>. Ask them or an admin/moderator to remove it.",
+                delete_after=10,
+            )
+            return
+
+    # Remove it
+    removed = repo_manager.remove_repo(repo_list_path, cleaned)
     if removed:
-        await ctx.send(f"✅ **{repo}** has been removed from the watch list.", delete_after=10)
-        logger.info("User %s removed repo: %s", ctx.author, repo)
+        await ctx.send(f"✅ **{cleaned}** has been removed from the watch list.", delete_after=10)
+        logger.info("User %s removed repo: %s", ctx.author, cleaned)
     else:
-        await ctx.send(f"⚠️ **{repo}** was not found in the watch list.", delete_after=10)
+        await ctx.send(f"⚠️ **{cleaned}** was not found in the watch list.", delete_after=10)
 
 
 @bot.command(name="list-repos", aliases=["list", "repos"])
@@ -365,6 +512,7 @@ async def list_repos(ctx: commands.Context):
     content = f"**📋 Watched Repositories ({len(repos)}):**\n{lines}"
     try:
         await ctx.author.send(content)
+        await ctx.send("📬 Sent — check your DMs!", delete_after=5)
     except (discord.Forbidden, discord.HTTPException):
         await ctx.send(content, delete_after=30)
 
@@ -448,12 +596,12 @@ def _register_help_command():
         )
         embed.add_field(
             name=f"{prefix}add-repo <owner/repo>",
-            value=f"Add a repository to watch.\n*Alias: {prefix}add*\n*Restricted to Admins & Moderators*",
+            value=f"Add a repository to watch.\n*Alias: {prefix}add*\n*Admins, Mods, or members (24h+)*\nRepository is verified before adding.",
             inline=False,
         )
         embed.add_field(
             name=f"{prefix}remove-repo <owner/repo>",
-            value=f"Remove a repository from the watch list.\n*Aliases: {prefix}remove, {prefix}rm*\n*Restricted to Admins & Moderators*",
+            value=f"Remove a repository from the watch list.\n*Aliases: {prefix}remove, {prefix}rm*\n*Admins/Mods can remove any; members can remove their own*",
             inline=False,
         )
         embed.add_field(
@@ -473,6 +621,7 @@ def _register_help_command():
         )
         try:
             await ctx.author.send(embed=embed)
+            await ctx.send("📬 Sent — check your DMs!", delete_after=5)
         except (discord.Forbidden, discord.HTTPException):
             await ctx.send(embed=embed, delete_after=30)
 
@@ -500,6 +649,16 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         )
         logger.warning(
             "User %s tried to use %s without permission: %s",
+            ctx.author, ctx.command, error,
+        )
+        return
+
+    # Handle 24-hour member gate for !add-repo
+    if isinstance(error, commands.CheckFailure):
+        await _delete_command(ctx)
+        await ctx.send(str(error), delete_after=10)
+        logger.info(
+            "User %s blocked by CheckFailure on %s: %s",
             ctx.author, ctx.command, error,
         )
         return

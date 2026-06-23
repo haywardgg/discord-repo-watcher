@@ -11,12 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`!help` and `!list-repos` now send results via DM** — Keeps channels completely clean. Falls back to in-channel with auto-delete after 30 seconds if the user has DMs disabled.
 - **Shortened command response lifetimes** — All in-channel command response messages now auto-delete after 10 seconds.
+- **Repo ownership tracking** — `!add-repo` records the Discord user ID of who added each repository. `!remove-repo` allows any member to remove only repos they added themselves; admins and moderators can remove any. When a non-owner tries to remove, the bot pings who originally added it. Backward compatible with existing repos.
+- **`!add-repo` access expanded** — Members who joined ≥ 24 hours ago can now add repos. Newer members get a friendly message telling them to wait or ask an admin.
+- **Repository URL rejection** — `!add-repo` now requires the short `owner/repo` format. Full URLs are rejected to prevent Discord timeout penalties.
+- **Repository existence verification** — `!add-repo` verifies the repo exists on GitHub via the API before saving.
 
 ### Fixed
 
 - **Pylance type error on `bot.user` in `on_ready()`** — Added `assert bot.user is not None` to narrow the `Optional[ClientUser]` type, resolving the "id is not a known attribute of None" diagnostic.
 
 ### Added
+
+- **Strict command channel option** — New `.env` setting `STRICT_COMMAND_CHANNEL` (default: empty/disabled). When set to a channel name (e.g. `repo-watcher`), the bot silently deletes any non-command message in that channel. Only official bot commands are allowed; all other messages are removed instantly with no warning or notification. Off by default.
+- **`on_message` event in `bot.py`** — New event handler that intercepts messages in the strict channel, processes commands normally, and deletes everything else.
+- **`get_strict_command_channel()` in `config.py`** — Returns the configured strict channel name, or empty string when disabled.
+- **`is_admin_or_mod_or_member()` check in `bot.py`** — New decorator for `!add-repo`: admins/mods always allowed; members allowed if joined ≥ 24h ago.
+- **`repo_exists()` in `watcher.py`** — Verifies a GitHub repository exists and is accessible via the API before adding.
+- **`get_repo_owner()` / `load_repos_with_owners()` in `repo_manager.py`** — New functions for ownership tracking. `repos.txt` now stores `owner/repo <user_id>` format, backward compatible with old format.
 
 - **Delete previous notifications option** — New `.env` setting `DELETE_PREVIOUS_NOTIFICATIONS` (default `false`). When set to `true`, the bot deletes a repo's previous commit notification embed before posting a new one, keeping exactly one notification per repo in the chat channel.
 - **`notification_tracker.py`** — New module that tracks the Discord channel ID and message ID of each repo's last notification in a `.notification-messages` file.

@@ -115,6 +115,16 @@ def get_notification_tracking_path() -> str:
     )
 
 
+def get_strict_command_channel() -> str:
+    """
+    Get the name of a channel where only bot commands are allowed.
+    All non-command messages in this channel are silently deleted.
+    Empty string (default) disables this feature.
+    Set STRICT_COMMAND_CHANNEL="repo-watcher" in .env to enable.
+    """
+    return os.getenv("STRICT_COMMAND_CHANNEL", "").strip()
+
+
 def get_ignore_strings() -> list[str]:
     """
     Get a list of strings to ignore in commit messages.

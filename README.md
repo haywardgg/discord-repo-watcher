@@ -109,6 +109,7 @@ Edit `.env` with your settings:
 | `IGNORE_FILE_PATTERNS` | ❌ No | `""` | Comma-separated glob patterns for files to ignore (e.g. `README.md,*.txt`). Notification suppressed when ALL files match |
 | `IGNORE_FOLDER_PATTERNS` | ❌ No | `""` | Comma-separated folder substrings to ignore (e.g. `docs/,assets/`). Notification suppressed when ALL files are in ignored folders |
 | `IGNORE_STRINGS` | ❌ No | `""` | Comma-separated strings in commit messages to suppress (case-insensitive, e.g. `typo,chore,dependabot`) |
+| `STRICT_COMMAND_CHANNEL` | ❌ No | `""` | Channel name where only bot commands are allowed. Non-command messages are silently deleted. Leave empty to disable. |
 | `DELETE_PREVIOUS_NOTIFICATIONS` | ❌ No | `false` | When `true`, deletes a repo's previous commit notification embed from the channel before posting a new one, keeping only one notification per repo |
 
 ### 4. Run the Bot
@@ -127,8 +128,8 @@ python bot.py
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
-| `!add-repo <owner/repo>` | `!add` | Add a repository to watch *(Admins & Moderators only)* |
-| `!remove-repo <owner/repo>` | `!remove`, `!rm` | Remove a repository from watch *(Admins & Moderators only)* |
+| `!add-repo <owner/repo>` | `!add` | Add a repository to watch *(Admins, Mods, or members 24h+)* |
+| `!remove-repo <owner/repo>` | `!remove`, `!rm` | Remove a repository *(Admins/Mods: any; members: own repos only)* |
 | `!list-repos` | `!list`, `!repos` | Show all watched repositories |
 | `!check-now` | `!check`, `!scan` | Manually check all repos for new commits |
 | `!help` | `!commands` | Show available commands |
@@ -137,7 +138,6 @@ python bot.py
 
 ```
 !add-repo microsoft/vscode
-!add-repo https://github.com/owner/example-repo.git
 !remove-repo microsoft/vscode
 !list-repos
 !check-now
