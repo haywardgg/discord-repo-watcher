@@ -404,7 +404,8 @@ async def check_loop():
                 if reason == "first_seen":
                     await notification_channel.send(
                         f"⚠️ **{repo}** - Now tracking this repository! "
-                        f"First seen commit: {commit_hash[:7]}"
+                        f"First seen commit: {commit_hash[:7]}",
+                        delete_after=10,
                     )
                     avatar_url = watcher.get_repo_avatar_url(repo)
                     await _handle_commit_update(
